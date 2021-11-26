@@ -217,64 +217,115 @@ TEST_F(FilePieceMapTest, priorities)
     compare_to_expected();
 }
 
-#if 0
-    static constexpr std::array<uint64_t, 17> FileSizes {
-        500, // [offset 0] begins and ends on a piece boundary
-        0, // [offset 500] zero-sized files
-        0,   0, 0,
-        50, // [offset 500] begins on a piece boundary
-        100, // [offset 550] neither begins nor ends on a piece boundary, spans >1 piece
-        10, // [offset 650] small files all contained in a single piece
-        9,   8, 7, 6,
-        311, // [offset 690] ends end-of-torrent
-        0, // [offset 1001] zero-sized files at the end-of-torrent
-        0,   0, 0,
-        // sum is 1001 == TotalSize
+TEST_F(FilePieceMapTest, wanted)
+{
+    auto const fpm = tr_file_piece_map{ block_info_, std::data(FileSizes), std::size(FileSizes) };
+    auto files_wanted = tr_files_wanted(fpm);
+    tr_file_index_t const n_files = std::size(FileSizes);
+
+    // make a helper to compare file & piece priorities
+    auto expected_files_wanted = tr_bitfield(n_files);
+    auto expected_pieces_wanted = tr_bitfield(block_info_.n_pieces);
+    auto const compare_to_expected = [&, this]()
+    {
+        for (tr_file_index_t i = 0; i < n_files; ++i)
+        {
+            std::cerr << __FILE__ << ':' << __LINE__ << " file " << i << std::endl;
+            EXPECT_EQ(int(expected_files_wanted.test(i)), int(files_wanted.fileWanted(i)));
+        }
+        for (tr_piece_index_t i = 0; i < block_info_.n_pieces; ++i)
+        {
+            std::cerr << __FILE__ << ':' << __LINE__ << " piece " << i << std::endl;
+            EXPECT_EQ(int(expected_pieces_wanted.test(i)), int(files_wanted.pieceWanted(i)));
+        }
     };
+
+    // check everything is wanted by default
+    expected_files_wanted.setHasAll();
+    expected_pieces_wanted.setHasAll();
+    compare_to_expected();
+
+    // set the first file as not wanted.
+    // since this begins and ends on a piece boundary,
+    // this shouldn't affect any other files' pieces
+    bool wanted = false;
+    files_wanted.set(0, wanted);
+    expected_files_wanted.set(0, wanted);
+    expected_pieces_wanted.setSpan(0, 5, wanted);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+
+    // now test when a piece has >1 file.
+    // if *any* file in that piece is wanted, then we want the piece too.
+    // file #1: byte [100..100) piece [5, 6) (zero-byte file)
+    // file #2: byte [100..100) piece [5, 6) (zero-byte file)
+    // file #3: byte [100..100) piece [5, 6) (zero-byte file)
+    // file #4: byte [100..100) piece [5, 6) (zero-byte file)
+    // file #5: byte [500..550) piece [5, 6)
+    // file #6: byte [550..650) piece [5, 7)
+    //
+    // first test setting file #5...
+    files_wanted.set(5, false);
+    expected_files_wanted.unset(5);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+    // marking all the files in the piece as unwanted
+    // should cause the piece to become unwanted
+    files_wanted.set(1, false);
+    files_wanted.set(2, false);
+    files_wanted.set(3, false);
+    files_wanted.set(4, false);
+    files_wanted.set(5, false);
+    files_wanted.set(6, false);
+    expected_files_wanted.setSpan(1, 7, false);
+    expected_pieces_wanted.unset(5);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+    // but as soon as any of them is turned back to wanted,
+    // the piece should pop back.
+    files_wanted.set(6, true);
+    expected_files_wanted.set(6, true);
+    expected_pieces_wanted.set(5);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+    files_wanted.set(5, true);
+    files_wanted.set(6, false);
+    expected_files_wanted.set(5);
+    expected_files_wanted.unset(6);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+    files_wanted.set(4, true);
+    files_wanted.set(5, false);
+    expected_files_wanted.set(4);
+    expected_files_wanted.unset(5);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+
+    // Prep for the next test: set all files to unwanted priority
+    for (tr_file_index_t i = 0; i < n_files; ++i)
+    {
+        files_wanted.set(i, false);
+    }
+    expected_files_wanted.setHasNone();
+    expected_pieces_wanted.setHasNone();
+    compare_to_expected();
+
+    // *Sigh* OK what happens to files_wanted if you say the only
+    // file you want is a zero-byte file? Arguably nothing should happen
+    // since you can't download a zero-byte file. But that would complicate
+    // the coe for a stupid use case, so let's KISS.
+    //
+    // Check that even zero-sized files can change a file's 'wanted' state
+    // file #1: byte [500, 500) piece [5, 6)
+    files_wanted.set(1, true);
+    expected_files_wanted.set(1);
+    expected_pieces_wanted.set(5);
+    compare_to_expected();
+    // Check that zero-sized files at the end of a torrent change the last piece's state.
+    // file #16 byte [1001, 1001) piece [10, 11)
+    files_wanted.set(16, true);
+    expected_files_wanted.set(16);
+    expected_pieces_wanted.set(10);
+    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
 }
-
-
-class tr_file_piece_map
-{
-public:
-    template<typename T> struct index_span_t { T begin; T end; };
-    using file_span_t = index_span_t<tr_file_index_t>;
-    using piece_span_t = index_span_t<tr_piece_index_t>;
-
-    tr_file_piece_map(tr_block_info const& block_info, std::vector<uint64_t> const& file_sizes);
-    [[nodiscard]] piece_span_t pieceSpan(tr_file_index_t file) const;
-    [[nodiscard]] file_span_t fileSpan(tr_piece_index_t piece) const;
-    [[nodiscard]] size_t size() const { return std::size(files_); }
-
-private:
-    std::vector<piece_span_t> files_;
-};
-
-class tr_file_priorities
-{
-public:
-    explicit tr_file_priorities(tr_file_piece_map const& fpm);
-    void set(tr_file_index_t const* files, size_t n, tr_priority_t priority);
-
-    [[nodiscard]] tr_priority_t filePriority(tr_file_index_t file) const;
-    [[nodiscard]] tr_priority_t piecePriority(tr_piece_index_t piece) const;
-
-private:
-    tr_file_piece_map const& fpm_;
-    std::vector<tr_priority_t> priorities_;
-};
-
-class tr_file_wanted
-{
-public:
-    explicit tr_file_wanted(tr_file_piece_map const& fpm);
-    void set(tr_file_index_t const* files, size_t n, bool wanted);
-
-    [[nodiscard]] tr_priority_t fileWanted(tr_file_index_t file) const;
-    [[nodiscard]] tr_priority_t pieceWanted(tr_piece_index_t piece) const;
-
-private:
-    tr_file_piece_map const& fpm_;
-    tr_bitfield wanted_;
-};
-#endif

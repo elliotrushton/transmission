@@ -59,10 +59,10 @@ private:
     std::vector<tr_priority_t> priorities_;
 };
 
-class tr_file_wanted
+class tr_files_wanted
 {
 public:
-    explicit tr_file_wanted(tr_file_piece_map const& fpm);
+    explicit tr_files_wanted(tr_file_piece_map const& fpm);
     void set(tr_file_index_t file, bool wanted);
     void set(tr_file_index_t const* files, size_t n, bool wanted);
 

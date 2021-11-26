@@ -164,19 +164,19 @@ tr_priority_t tr_file_priorities::piecePriority(tr_piece_index_t piece) const
 ****
 ***/
 
-tr_file_wanted::tr_file_wanted(tr_file_piece_map const& fpm)
+tr_files_wanted::tr_files_wanted(tr_file_piece_map const& fpm)
     : fpm_{ fpm }
     , wanted_{ std::size(fpm) }
 {
     wanted_.setHasAll(); // by default we want all files
 }
 
-void tr_file_wanted::set(tr_file_index_t file, bool wanted)
+void tr_files_wanted::set(tr_file_index_t file, bool wanted)
 {
     wanted_.set(file, wanted);
 }
 
-void tr_file_wanted::set(tr_file_index_t const* files, size_t n, bool wanted)
+void tr_files_wanted::set(tr_file_index_t const* files, size_t n, bool wanted)
 {
     for (size_t i = 0; i < n; ++i)
     {
@@ -184,12 +184,12 @@ void tr_file_wanted::set(tr_file_index_t const* files, size_t n, bool wanted)
     }
 }
 
-tr_priority_t tr_file_wanted::fileWanted(tr_file_index_t file) const
+tr_priority_t tr_files_wanted::fileWanted(tr_file_index_t file) const
 {
     return wanted_.test(file);
 }
 
-tr_priority_t tr_file_wanted::pieceWanted(tr_piece_index_t piece) const
+tr_priority_t tr_files_wanted::pieceWanted(tr_piece_index_t piece) const
 {
     auto const [begin, end] = fpm_.fileSpan(piece);
     return wanted_.count(begin, end) != 0;
