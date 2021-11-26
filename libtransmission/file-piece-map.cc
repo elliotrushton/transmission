@@ -17,13 +17,13 @@
 
 #include <iostream>
 
-tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, std::vector<uint64_t> const& file_sizes)
+tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files)
 {
-    tr_file_index_t const n = std::size(file_sizes);
-    files_.resize(n);
+    files_.resize(n_files);
+    files_.shrink_to_fit();
 
     uint64_t offset = 0;
-    for (tr_file_index_t i = 0; i < n; ++i)
+    for (tr_file_index_t i = 0; i < n_files; ++i)
     {
         auto const file_size = file_sizes[i];
         std::cerr << __FILE__ << ':' << __LINE__ << " file " << i << " offset " << offset << " size " << file_size << std::endl;
@@ -54,22 +54,28 @@ tr_file_piece_map::piece_span_t tr_file_piece_map::pieceSpan(tr_file_index_t fil
     return files_[file];
 }
 
+#include <iostream>
+
 tr_file_piece_map::file_span_t tr_file_piece_map::fileSpan(tr_piece_index_t piece) const
 {
     struct Compare
     {
         int compare(tr_piece_index_t piece, piece_span_t span) const // <=>
         {
+            // std::cerr << __FILE__ << ':' << __LINE__ << " comparing piece " << piece << " to span [" << span.begin << ".." << span.end << ')' << std::endl;
             if (piece < span.begin)
             {
+                // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return -1" << std::endl;
                 return -1;
             }
 
             if (piece >= span.end)
             {
+                // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return 1" << std::endl;
                 return 1;
             }
 
+            // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return 0" << std::endl;
             return 0;
         }
 
@@ -91,6 +97,8 @@ tr_file_piece_map::file_span_t tr_file_piece_map::fileSpan(tr_piece_index_t piec
 
     auto const begin = std::begin(files_);
     auto const pair = std::equal_range(begin, std::end(files_), piece, Compare{});
+    std::cerr << __FILE__ << ':' << __LINE__ << " piece " << piece << " equal_range " << std::distance(begin, pair.first)
+              << "..." << std::distance(begin, pair.second) << std::endl;
     return { tr_piece_index_t(std::distance(begin, pair.first)), tr_piece_index_t(std::distance(begin, pair.second)) };
 }
 
@@ -107,11 +115,16 @@ tr_file_priorities::tr_file_priorities(tr_file_piece_map const& fpm)
     std::fill_n(std::begin(priorities_), n, TR_PRI_NORMAL);
 }
 
+void tr_file_priorities::set(tr_file_index_t file, tr_priority_t priority)
+{
+    priorities_[file] = priority;
+}
+
 void tr_file_priorities::set(tr_file_index_t const* files, size_t n, tr_priority_t priority)
 {
     for (size_t i = 0; i < n; ++i)
     {
-        priorities_[files[i]] = priority;
+        set(files[i], priority);
     }
 }
 
@@ -120,13 +133,31 @@ tr_priority_t tr_file_priorities::filePriority(tr_file_index_t file) const
     return priorities_[file];
 }
 
+#include <iostream>
+
 tr_priority_t tr_file_priorities::piecePriority(tr_piece_index_t piece) const
 {
+    std::cerr << __FILE__ << ':' << __LINE__ << " all priorities ";
+    for (size_t i = 0; i < std::size(priorities_); ++i)
+    {
+        std::cerr << int(priorities_[i]) << ' ';
+    }
+    std::cerr << std::endl;
+    std::cerr << __FILE__ << ':' << __LINE__ << " looking for priority of piece " << piece << std::endl;
     auto const [begin_idx, end_idx] = fpm_.fileSpan(piece);
+    std::cerr << __FILE__ << ':' << __LINE__ << "   ... begin_idx " << begin_idx << std::endl;
+    std::cerr << __FILE__ << ':' << __LINE__ << "   ... end_idx " << end_idx << std::endl;
     auto const begin = std::begin(priorities_) + begin_idx;
     auto const end = std::begin(priorities_) + end_idx;
     auto const it = std::max_element(begin, end);
-    return it != end ? *it : TR_PRI_NORMAL;
+    auto const ret = it != end ? *it : TR_PRI_NORMAL;
+    for (auto walk = begin; walk != end; ++walk)
+    {
+        std::cerr << int(*walk) << ' ';
+    }
+    std::cerr << std::endl;
+    std::cerr << __FILE__ << ':' << __LINE__ << "   ... ret " << ret << std::endl;
+    return ret;
 }
 
 /***
@@ -140,11 +171,16 @@ tr_file_wanted::tr_file_wanted(tr_file_piece_map const& fpm)
     wanted_.setHasAll(); // by default we want all files
 }
 
+void tr_file_wanted::set(tr_file_index_t file, bool wanted)
+{
+    wanted_.set(file, wanted);
+}
+
 void tr_file_wanted::set(tr_file_index_t const* files, size_t n, bool wanted)
 {
     for (size_t i = 0; i < n; ++i)
     {
-        wanted_.set(files[i], wanted);
+        set(files[i], wanted);
     }
 }
 
