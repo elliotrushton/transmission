@@ -215,6 +215,20 @@ TEST_F(FilePieceMapTest, priorities)
     expected_piece_priorities[10] = pri;
     std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
+
+    // test the batch API
+    auto file_indices = std::vector<tr_file_index_t>(n_files);
+    std::iota(std::begin(file_indices), std::end(file_indices), 0);
+    pri = TR_PRI_HIGH;
+    file_priorities.set(std::data(file_indices), std::size(file_indices), pri);
+    std::fill(std::begin(expected_file_priorities), std::end(expected_file_priorities), pri);
+    std::fill(std::begin(expected_piece_priorities), std::end(expected_piece_priorities), pri);
+    compare_to_expected();
+    pri = TR_PRI_LOW;
+    file_priorities.set(std::data(file_indices), std::size(file_indices), pri);
+    std::fill(std::begin(expected_file_priorities), std::end(expected_file_priorities), pri);
+    std::fill(std::begin(expected_piece_priorities), std::end(expected_piece_priorities), pri);
+    compare_to_expected();
 }
 
 TEST_F(FilePieceMapTest, wanted)
@@ -327,5 +341,17 @@ TEST_F(FilePieceMapTest, wanted)
     expected_files_wanted.set(16);
     expected_pieces_wanted.set(10);
     std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
+    compare_to_expected();
+
+    // test the batch API
+    auto file_indices = std::vector<tr_file_index_t>(n_files);
+    std::iota(std::begin(file_indices), std::end(file_indices), 0);
+    files_wanted.set(std::data(file_indices), std::size(file_indices), true);
+    expected_files_wanted.setHasAll();
+    expected_pieces_wanted.setHasAll();
+    compare_to_expected();
+    files_wanted.set(std::data(file_indices), std::size(file_indices), false);
+    expected_files_wanted.setHasNone();
+    expected_pieces_wanted.setHasNone();
     compare_to_expected();
 }
