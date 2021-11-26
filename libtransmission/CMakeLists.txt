@@ -26,6 +26,7 @@ set(PROJECT_FILES
   error.cc
   fdlimit.cc
   file-posix.cc
+  file-piece-map.cc
   file-win32.cc
   file.cc
   handshake.cc
@@ -156,6 +157,7 @@ set(${PROJECT_NAME}_PRIVATE_HEADERS
     crypto-utils.h
     crypto.h
     fdlimit.h
+    file-piece-map.h
     handshake.h
     history.h
     inout.h
