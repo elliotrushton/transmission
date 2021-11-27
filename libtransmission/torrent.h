@@ -26,6 +26,7 @@
 #include "block-info.h"
 #include "completion.h"
 #include "file.h"
+#include "file-piece-map.h"
 #include "quark.h"
 #include "session.h"
 #include "tr-assert.h"
@@ -62,8 +63,6 @@ void tr_torrentInitFileDLs(tr_torrent* tor, tr_file_index_t const* files, tr_fil
 using tr_labels_t = std::unordered_set<std::string>;
 
 void tr_torrentSetLabels(tr_torrent* tor, tr_labels_t&& labels);
-
-void tr_torrentRecheckCompleteness(tr_torrent*);
 
 void tr_torrentChangeMyPort(tr_torrent* session);
 
@@ -131,6 +130,9 @@ public:
     tr_torrent(tr_info const& inf)
         : tr_block_info{ inf.totalSize, inf.pieceSize }
         , completion{ this, this }
+        , fpm_{ *this, inf }
+        , file_priorities_{ fpm_ }
+        , files_wanted_{ fpm_ }
     {
     }
 
@@ -165,6 +167,54 @@ public:
     auto unique_lock() const
     {
         return session->unique_lock();
+    }
+
+    /// PRIORITIES
+
+    void setFileWanted(tr_file_index_t file, bool wanted)
+    {
+        files_wanted_.set(file, wanted);
+        completion.invalidateSizeWhenDone();
+        setDirty();
+    }
+
+    void setFileWanted(tr_file_index_t const* files, size_t n_wanted, bool wanted)
+    {
+        files_wanted_.set(files, n_wanted, wanted);
+        completion.invalidateSizeWhenDone();
+        setDirty();
+    }
+
+    [[nodiscard]] bool fileWanted(tr_file_index_t file) const
+    {
+        return files_wanted_.fileWanted(file);
+    }
+
+    [[nodiscard]] bool pieceWanted(tr_piece_index_t piece) const
+    {
+        return files_wanted_.pieceWanted(piece);
+    }
+
+    void setFilePriority(tr_file_index_t file, tr_priority_t priority)
+    {
+        file_priorities_.set(file, priority);
+        setDirty();
+    }
+
+    void setFilePriorities(tr_file_index_t const* files, size_t n_files, tr_priority_t priority)
+    {
+        file_priorities_.set(files, n_files, priority);
+        setDirty();
+    }
+
+    [[nodiscard]] tr_priority_t filePriority(tr_file_index_t file) const
+    {
+        return file_priorities_.filePriority(file);
+    }
+
+    [[nodiscard]] tr_priority_t piecePriority(tr_piece_index_t piece) const
+    {
+        return file_priorities_.piecePriority(piece);
     }
 
     /// COMPLETION
@@ -241,40 +291,10 @@ public:
 
     bool pieceIsDnd(tr_piece_index_t piece) const final
     {
-        return dnd_pieces_.test(piece);
+        return !files_wanted_.pieceWanted(piece);
     }
 
-    /// PRIORITIES
-
-    void setPiecePriority(tr_piece_index_t piece, tr_priority_t priority)
-    {
-        // since 'TR_PRI_NORMAL' is by far the most common, save some
-        // space by treating anything not in the map as normal
-        if (priority == TR_PRI_NORMAL)
-        {
-            piece_priorities_.erase(piece);
-
-            if (std::empty(piece_priorities_))
-            {
-                // ensure we release piece_priorities_' internal memory
-                piece_priorities_ = decltype(piece_priorities_){};
-            }
-        }
-        else
-        {
-            piece_priorities_[piece] = priority;
-        }
-    }
-
-    tr_priority_t piecePriority(tr_piece_index_t piece) const
-    {
-        auto const it = piece_priorities_.find(piece);
-        if (it == std::end(piece_priorities_))
-        {
-            return TR_PRI_NORMAL;
-        }
-        return it->second;
-    }
+    void recheckCompleteness();
 
     /// CHECKSUMS
 
@@ -311,8 +331,7 @@ public:
             // if a file has changed, mark its pieces as unchecked
             if (mtime == 0 || mtime != mtimes[i])
             {
-                auto const begin = info.files[i].firstPiece;
-                auto const end = info.files[i].lastPiece + 1;
+                auto const [begin, end] = fpm_.pieceSpan(i);
                 checked_pieces_.unsetSpan(begin, end);
             }
         }
@@ -339,8 +358,6 @@ public:
 
 public:
     tr_info info = {};
-
-    tr_bitfield dnd_pieces_ = tr_bitfield{ 0 };
 
     tr_bitfield checked_pieces_ = tr_bitfield{ 0 };
 
@@ -492,6 +509,10 @@ public:
     tr_labels_t labels;
 
     static auto constexpr MagicNumber = int{ 95549 };
+
+    tr_file_piece_map fpm_;
+    tr_file_priorities file_priorities_;
+    tr_files_wanted files_wanted_;
 
 private:
     mutable std::vector<tr_sha1_digest_t> piece_checksums_;

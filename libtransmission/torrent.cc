@@ -578,6 +578,7 @@ static void onTrackerResponse(tr_torrent* tor, tr_tracker_event const* event, vo
 ****
 ***/
 
+#if 0
 static constexpr void initFilePieces(tr_torrent* tor, tr_file_index_t fileIndex)
 {
     TR_ASSERT(tor != nullptr);
@@ -649,6 +650,7 @@ static void tr_torrentInitFilePieces(tr_torrent* tor)
 
 static void tr_torrentInitPiecePriorities(tr_torrent* tor)
 {
+
     tor->piece_priorities_.clear();
 
     // throw away file prorities once we're done downloading,
@@ -680,6 +682,7 @@ static void tr_torrentInitPiecePriorities(tr_torrent* tor)
 
     tr_free(firstFiles);
 }
+#endif
 
 static void torrentStart(tr_torrent* tor, bool bypass_queue);
 
@@ -689,7 +692,9 @@ void tr_torrentGotNewInfoDict(tr_torrent* tor)
 {
     tor->initSizes(tor->info.totalSize, tor->info.pieceSize);
     tor->completion = tr_completion{ tor, tor };
-    tr_torrentInitFilePieces(tor);
+    tor->fpm_ = tr_file_piece_map{ *tor, tor->info };
+    std::swap(tor->file_priorities_, tr_file_priorities{ tor->fpm_ });
+    std::swap(tor->files_wanted_, tr_files_wanted{ tor->fpm_ });
 
     tr_peerMgrOnTorrentGotMetainfo(tor);
 
@@ -755,7 +760,6 @@ static void torrentInit(tr_torrent* tor, tr_ctor const* ctor)
     tor->uniqueId = nextUniqueId++;
     tor->queuePosition = tr_sessionCountTorrents(session);
 
-    tor->dnd_pieces_ = tr_bitfield{ tor->info.pieceCount };
     tor->checked_pieces_ = tr_bitfield{ tor->info.pieceCount };
 
     tr_sha1(tor->obfuscatedHash, "req2", 4, tor->info.hash, SHA_DIGEST_LENGTH, nullptr);
@@ -791,7 +795,9 @@ static void torrentInit(tr_torrent* tor, tr_ctor const* ctor)
 
     tor->initSizes(tor->info.totalSize, tor->info.pieceSize);
     tor->completion = tr_completion{ tor, tor };
+#if 0
     tr_torrentInitFilePieces(tor);
+#endif
 
     // tr_torrentLoadResume() calls a lot of tr_torrentSetFoo() methods
     // that set things as dirty, but... these settings being loaded are
@@ -813,7 +819,9 @@ static void torrentInit(tr_torrent* tor, tr_ctor const* ctor)
 
     tr_ctorInitTorrentPriorities(ctor, tor);
     tr_ctorInitTorrentWanted(ctor, tor);
+#if 0
     tr_torrentInitPiecePriorities(tor);
+#endif
 
     refreshCurrentDir(tor);
 
@@ -1961,66 +1969,67 @@ static void torrentCallScript(tr_torrent const* tor, char const* script)
     tr_free(torrent_dir);
 }
 
-void tr_torrentRecheckCompleteness(tr_torrent* tor)
+void tr_torrent::recheckCompleteness()
 {
-    auto const lock = tor->unique_lock();
+    auto const lock = this->unique_lock();
 
-    auto const completeness = tor->completion.status();
-
-    if (completeness != tor->completeness)
+    auto const completeness = this->completion.status();
+    if (completeness == this->completeness)
     {
-        bool const recentChange = tor->downloadedCur != 0;
-        bool const wasLeeching = !tr_torrentIsSeed(tor);
-        bool const wasRunning = tor->isRunning;
+        return;
+    }
 
+    bool const recentChange = this->downloadedCur != 0;
+    bool const wasLeeching = !tr_torrentIsSeed(this);
+    bool const wasRunning = this->isRunning;
+
+    if (recentChange)
+    {
+        tr_logAddTorInfo(
+            this,
+            _("State changed from \"%1$s\" to \"%2$s\""),
+            getCompletionString(this->completeness),
+            getCompletionString(completeness));
+    }
+
+    this->completeness = completeness;
+    tr_fdTorrentClose(this->session, this->uniqueId);
+
+    if (tr_torrentIsSeed(this))
+    {
         if (recentChange)
         {
-            tr_logAddTorInfo(
-                tor,
-                _("State changed from \"%1$s\" to \"%2$s\""),
-                getCompletionString(tor->completeness),
-                getCompletionString(completeness));
+            tr_announcerTorrentCompleted(this);
+            this->doneDate = this->anyDate = tr_time();
         }
 
-        tor->completeness = completeness;
-        tr_fdTorrentClose(tor->session, tor->uniqueId);
-
-        if (tr_torrentIsSeed(tor))
+        if (wasLeeching && wasRunning)
         {
-            if (recentChange)
-            {
-                tr_announcerTorrentCompleted(tor);
-                tor->doneDate = tor->anyDate = tr_time();
-            }
-
-            if (wasLeeching && wasRunning)
-            {
-                /* clear interested flag on all peers */
-                tr_peerMgrClearInterest(tor);
-            }
-
-            if (tor->currentDir == tor->incompleteDir)
-            {
-                tor->setLocation(tor->downloadDir, true, nullptr, nullptr);
-            }
+            /* clear interested flag on all peers */
+            tr_peerMgrClearInterest(this);
         }
 
-        fireCompletenessChange(tor, completeness, wasRunning);
-
-        if (tr_torrentIsSeed(tor) && wasLeeching && wasRunning)
+        if (this->currentDir == this->incompleteDir)
         {
-            /* if completeness was TR_LEECH, the seed limit check
-               will have been skipped in bandwidthPulse */
-            tr_torrentCheckSeedLimit(tor);
+            this->setLocation(this->downloadDir, true, nullptr, nullptr);
         }
+    }
 
-        tr_torrentSetDirty(tor);
+    fireCompletenessChange(this, completeness, wasRunning);
 
-        if (tr_torrentIsSeed(tor))
-        {
-            tr_torrentSave(tor);
-            callScriptIfEnabled(tor, TR_SCRIPT_ON_TORRENT_DONE);
-        }
+    if (tr_torrentIsSeed(this) && wasLeeching && wasRunning)
+    {
+        /* if completeness was TR_LEECH, the seed limit check
+           will have been skipped in bandwidthPulse */
+        tr_torrentCheckSeedLimit(this);
+    }
+
+    tr_torrentSetDirty(this);
+
+    if (tr_torrentIsSeed(this))
+    {
+        tr_torrentSave(this);
+        callScriptIfEnabled(this, TR_SCRIPT_ON_TORRENT_DONE);
     }
 }
 
@@ -2050,6 +2059,7 @@ void tr_torrentSetMetadataCallback(tr_torrent* tor, tr_torrent_metadata_func fun
 ***  File priorities
 **/
 
+#if 0
 void tr_torrentInitFilePriority(tr_torrent* tor, tr_file_index_t fileIndex, tr_priority_t priority)
 {
     TR_ASSERT(tr_isTorrent(tor));
@@ -2066,41 +2076,15 @@ void tr_torrentInitFilePriority(tr_torrent* tor, tr_file_index_t fileIndex, tr_p
         tor->setPiecePriority(i, calculatePiecePriority(info, i, fileIndex));
     }
 }
+#endif
 
-void tr_torrentSetFilePriorities(
-    tr_torrent* tor,
-    tr_file_index_t const* files,
-    tr_file_index_t fileCount,
-    tr_priority_t priority)
+void tr_torrentSetFilePriorities(tr_torrent* tor, tr_file_index_t const* files, tr_file_index_t n_files, tr_priority_t priority)
 {
-    TR_ASSERT(tr_isTorrent(tor));
-    auto const lock = tor->unique_lock();
-
-    for (tr_file_index_t i = 0; i < fileCount; ++i)
-    {
-        if (files[i] < tor->info.fileCount)
-        {
-            tr_torrentInitFilePriority(tor, files[i], priority);
-        }
-    }
-
+    tor->file_priorities_.set(files, n_files, priority);
     tr_torrentSetDirty(tor);
 }
 
-tr_priority_t* tr_torrentGetFilePriorities(tr_torrent const* tor)
-{
-    TR_ASSERT(tr_isTorrent(tor));
-
-    tr_priority_t* p = tr_new0(tr_priority_t, tor->info.fileCount);
-
-    for (tr_file_index_t i = 0; i < tor->info.fileCount; ++i)
-    {
-        p[i] = tor->info.files[i].priority;
-    }
-
-    return p;
-}
-
+#if 0
 /**
 ***  File DND
 **/
@@ -2167,7 +2151,7 @@ static void setFileDND(tr_torrent* tor, tr_file_index_t fileIndex, bool doDownlo
     }
 }
 
-void tr_torrentInitFileDLs(tr_torrent* tor, tr_file_index_t const* files, tr_file_index_t fileCount, bool doDownload)
+void tr_torrentInitFileDLs(tr_torrent* tor, tr_file_index_t const* files, tr_file_index_t fileCount, bool wanted)
 {
     TR_ASSERT(tr_isTorrent(tor));
     auto const lock = tor->unique_lock();
@@ -2176,12 +2160,13 @@ void tr_torrentInitFileDLs(tr_torrent* tor, tr_file_index_t const* files, tr_fil
     {
         if (files[i] < tor->info.fileCount)
         {
-            setFileDND(tor, files[i], doDownload);
+            files_wanted_.set(files, n_files, wanted);
         }
     }
 
     tor->completion.invalidateSizeWhenDone();
 }
+#endif
 
 void tr_torrentSetFileDLs(tr_torrent* tor, tr_file_index_t const* files, tr_file_index_t fileCount, bool doDownload)
 {
@@ -2992,19 +2977,16 @@ static void tr_torrentFileCompleted(tr_torrent* tor, tr_file_index_t fileIndex)
     }
 }
 
-static void tr_torrentPieceCompleted(tr_torrent* tor, tr_piece_index_t pieceIndex)
+static void tr_torrentPieceCompleted(tr_torrent* tor, tr_piece_index_t piece)
 {
-    tr_peerMgrPieceCompleted(tor, pieceIndex);
+    tr_peerMgrPieceCompleted(tor, piece);
 
-    /* if this piece completes any file, invoke the fileCompleted func for it */
-    for (tr_file_index_t i = 0; i < tor->info.fileCount; ++i)
+    auto const [begin, end] = tor->fpm_.fileSpan(piece);
+    for (tr_file_index_t file = begin; file < end; ++file)
     {
-        tr_file const* file = &tor->info.files[i];
-
-        if ((file->firstPiece <= pieceIndex) && (pieceIndex <= file->lastPiece) &&
-            tor->completion.hasBlocks(tr_torGetFileBlockSpan(tor, i)))
+        if (tor->completion.hasBlocks(tr_torGetFileBlockSpan(tor, file)))
         {
-            tr_torrentFileCompleted(tor, i);
+            tr_torrentFileCompleted(tor, file);
         }
     }
 }

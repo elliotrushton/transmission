@@ -33,6 +33,7 @@ public:
     using piece_span_t = index_span_t<tr_piece_index_t>;
 
     tr_file_piece_map(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files);
+    tr_file_piece_map(tr_block_info const& block_info, tr_info const& info);
     [[nodiscard]] piece_span_t pieceSpan(tr_file_index_t file) const;
     [[nodiscard]] file_span_t fileSpan(tr_piece_index_t piece) const;
     [[nodiscard]] size_t size() const
@@ -41,6 +42,7 @@ public:
     }
 
 private:
+    void init(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files);
     std::vector<piece_span_t> files_;
 };
 

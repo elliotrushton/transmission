@@ -15,7 +15,7 @@
 #include "block-info.h"
 #include "file-piece-map.h"
 
-tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files)
+void tr_file_piece_map::init(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files)
 {
     files_.resize(n_files);
     files_.shrink_to_fit();
@@ -39,6 +39,19 @@ tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t c
         files_[i] = piece_span_t{ begin_piece, end_piece };
         offset += file_size;
     }
+}
+
+tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files)
+{
+    init(block_info, file_sizes, n_files);
+}
+
+tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, tr_info const& info)
+{
+    tr_file_index_t const n = info.fileCount;
+    auto file_sizes = std::vector<uint64_t>(n);
+    std::transform(info.files, info.files + n, std::begin(file_sizes), [](tr_file const& file) { return file.length; });
+    init(block_info, std::data(file_sizes), std::size(file_sizes));
 }
 
 tr_file_piece_map::piece_span_t tr_file_piece_map::pieceSpan(tr_file_index_t file) const
@@ -123,7 +136,11 @@ tr_priority_t tr_file_priorities::piecePriority(tr_piece_index_t piece) const
     auto const begin = std::begin(priorities_) + begin_idx;
     auto const end = std::begin(priorities_) + end_idx;
     auto const it = std::max_element(begin, end);
-    return it != end ? *it : TR_PRI_NORMAL;
+    if (it == end)
+    {
+        return TR_PRI_NORMAL;
+    }
+    return *it;
 }
 
 /***
