@@ -15,8 +15,6 @@
 #include "block-info.h"
 #include "file-piece-map.h"
 
-#include <iostream>
-
 tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t const* file_sizes, size_t n_files)
 {
     files_.resize(n_files);
@@ -26,24 +24,18 @@ tr_file_piece_map::tr_file_piece_map(tr_block_info const& block_info, uint64_t c
     for (tr_file_index_t i = 0; i < n_files; ++i)
     {
         auto const file_size = file_sizes[i];
-        std::cerr << __FILE__ << ':' << __LINE__ << " file " << i << " offset " << offset << " size " << file_size << std::endl;
         auto const begin_piece = block_info.pieceOf(offset);
-        std::cerr << __FILE__ << ':' << __LINE__ << " ...begin piece " << begin_piece << std::endl;
         tr_piece_index_t end_piece = 0;
         if (file_size != 0)
         {
             auto const last_byte = offset + file_size - 1;
-            std::cerr << __FILE__ << ':' << __LINE__ << " ...final_byte " << last_byte << std::endl;
             auto const final_piece = block_info.pieceOf(last_byte);
-            std::cerr << __FILE__ << ':' << __LINE__ << " ...final_piece " << final_piece << std::endl;
             end_piece = final_piece + 1;
         }
         else
         {
             end_piece = begin_piece + 1;
-            std::cerr << __FILE__ << ':' << __LINE__ << " ...zero sized file" << std::endl;
         }
-        std::cerr << __FILE__ << ':' << __LINE__ << " ...end piece " << end_piece << std::endl;
         files_[i] = piece_span_t{ begin_piece, end_piece };
         offset += file_size;
     }
@@ -54,28 +46,22 @@ tr_file_piece_map::piece_span_t tr_file_piece_map::pieceSpan(tr_file_index_t fil
     return files_[file];
 }
 
-#include <iostream>
-
 tr_file_piece_map::file_span_t tr_file_piece_map::fileSpan(tr_piece_index_t piece) const
 {
     struct Compare
     {
         int compare(tr_piece_index_t piece, piece_span_t span) const // <=>
         {
-            // std::cerr << __FILE__ << ':' << __LINE__ << " comparing piece " << piece << " to span [" << span.begin << ".." << span.end << ')' << std::endl;
             if (piece < span.begin)
             {
-                // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return -1" << std::endl;
                 return -1;
             }
 
             if (piece >= span.end)
             {
-                // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return 1" << std::endl;
                 return 1;
             }
 
-            // std::cerr << __FILE__ << ':' << __LINE__ << "   ... return 0" << std::endl;
             return 0;
         }
 
@@ -97,8 +83,6 @@ tr_file_piece_map::file_span_t tr_file_piece_map::fileSpan(tr_piece_index_t piec
 
     auto const begin = std::begin(files_);
     auto const pair = std::equal_range(begin, std::end(files_), piece, Compare{});
-    std::cerr << __FILE__ << ':' << __LINE__ << " piece " << piece << " equal_range " << std::distance(begin, pair.first)
-              << "..." << std::distance(begin, pair.second) << std::endl;
     return { tr_piece_index_t(std::distance(begin, pair.first)), tr_piece_index_t(std::distance(begin, pair.second)) };
 }
 
@@ -133,31 +117,13 @@ tr_priority_t tr_file_priorities::filePriority(tr_file_index_t file) const
     return priorities_[file];
 }
 
-#include <iostream>
-
 tr_priority_t tr_file_priorities::piecePriority(tr_piece_index_t piece) const
 {
-    std::cerr << __FILE__ << ':' << __LINE__ << " all priorities ";
-    for (size_t i = 0; i < std::size(priorities_); ++i)
-    {
-        std::cerr << int(priorities_[i]) << ' ';
-    }
-    std::cerr << std::endl;
-    std::cerr << __FILE__ << ':' << __LINE__ << " looking for priority of piece " << piece << std::endl;
     auto const [begin_idx, end_idx] = fpm_.fileSpan(piece);
-    std::cerr << __FILE__ << ':' << __LINE__ << "   ... begin_idx " << begin_idx << std::endl;
-    std::cerr << __FILE__ << ':' << __LINE__ << "   ... end_idx " << end_idx << std::endl;
     auto const begin = std::begin(priorities_) + begin_idx;
     auto const end = std::begin(priorities_) + end_idx;
     auto const it = std::max_element(begin, end);
-    auto const ret = it != end ? *it : TR_PRI_NORMAL;
-    for (auto walk = begin; walk != end; ++walk)
-    {
-        std::cerr << int(*walk) << ' ';
-    }
-    std::cerr << std::endl;
-    std::cerr << __FILE__ << ':' << __LINE__ << "   ... ret " << ret << std::endl;
-    return ret;
+    return it != end ? *it : TR_PRI_NORMAL;
 }
 
 /***

@@ -100,18 +100,15 @@ TEST_F(FilePieceMapTest, priorities)
     {
         for (tr_file_index_t i = 0; i < n_files; ++i)
         {
-            std::cerr << __FILE__ << ':' << __LINE__ << " file " << i << std::endl;
             EXPECT_EQ(int(expected_file_priorities[i]), int(file_priorities.filePriority(i)));
         }
         for (tr_piece_index_t i = 0; i < block_info_.n_pieces; ++i)
         {
-            std::cerr << __FILE__ << ':' << __LINE__ << " piece " << i << std::endl;
             EXPECT_EQ(int(expected_piece_priorities[i]), int(file_priorities.piecePriority(i)));
         }
     };
 
     // check default priority is normal
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // set the first file as high priority.
@@ -124,7 +121,6 @@ TEST_F(FilePieceMapTest, priorities)
     {
         expected_piece_priorities[i] = pri;
     }
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // This file shares a piece with another file.
@@ -137,20 +133,17 @@ TEST_F(FilePieceMapTest, priorities)
     file_priorities.set(5, pri);
     expected_file_priorities[5] = pri;
     expected_piece_priorities[5] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // ...and that shared piece should still be the same when both are high...
     file_priorities.set(6, pri);
     expected_file_priorities[6] = pri;
     expected_piece_priorities[5] = pri;
     expected_piece_priorities[6] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // ...and that shared piece should still be the same when only 6 is high...
     pri = TR_PRI_NORMAL;
     file_priorities.set(5, pri);
     expected_file_priorities[5] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // setup for the next test: set all files to low priority
@@ -161,7 +154,6 @@ TEST_F(FilePieceMapTest, priorities)
     }
     std::fill(std::begin(expected_file_priorities), std::end(expected_file_priorities), pri);
     std::fill(std::begin(expected_piece_priorities), std::end(expected_piece_priorities), pri);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // Raise the priority of a small 1-piece file.
@@ -171,7 +163,6 @@ TEST_F(FilePieceMapTest, priorities)
     file_priorities.set(8, pri);
     expected_file_priorities[8] = pri;
     expected_piece_priorities[6] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // Raise the priority of another small 1-piece file in the same piece.
     // Since _it_ now has the highest priority in the piece, piecePriority should return _its_ value.
@@ -180,7 +171,6 @@ TEST_F(FilePieceMapTest, priorities)
     file_priorities.set(9, pri);
     expected_file_priorities[9] = pri;
     expected_piece_priorities[6] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // Prep for the next test: set all files to normal priority
@@ -191,7 +181,6 @@ TEST_F(FilePieceMapTest, priorities)
     }
     std::fill(std::begin(expected_file_priorities), std::end(expected_file_priorities), pri);
     std::fill(std::begin(expected_piece_priorities), std::end(expected_piece_priorities), pri);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // *Sigh* OK what happens to piece priorities if you set the priority
@@ -206,14 +195,12 @@ TEST_F(FilePieceMapTest, priorities)
     file_priorities.set(1, pri);
     expected_file_priorities[1] = pri;
     expected_piece_priorities[5] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // Check that zero-sized files at the end of a torrent change the last piece's priority.
     // file #16 byte [1001, 1001) piece [10, 11)
     file_priorities.set(16, pri);
     expected_file_priorities[16] = pri;
     expected_piece_priorities[10] = pri;
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // test the batch API
@@ -244,12 +231,10 @@ TEST_F(FilePieceMapTest, wanted)
     {
         for (tr_file_index_t i = 0; i < n_files; ++i)
         {
-            std::cerr << __FILE__ << ':' << __LINE__ << " file " << i << std::endl;
             EXPECT_EQ(int(expected_files_wanted.test(i)), int(files_wanted.fileWanted(i)));
         }
         for (tr_piece_index_t i = 0; i < block_info_.n_pieces; ++i)
         {
-            std::cerr << __FILE__ << ':' << __LINE__ << " piece " << i << std::endl;
             EXPECT_EQ(int(expected_pieces_wanted.test(i)), int(files_wanted.pieceWanted(i)));
         }
     };
@@ -266,7 +251,6 @@ TEST_F(FilePieceMapTest, wanted)
     files_wanted.set(0, wanted);
     expected_files_wanted.set(0, wanted);
     expected_pieces_wanted.setSpan(0, 5, wanted);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // now test when a piece has >1 file.
@@ -281,7 +265,6 @@ TEST_F(FilePieceMapTest, wanted)
     // first test setting file #5...
     files_wanted.set(5, false);
     expected_files_wanted.unset(5);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // marking all the files in the piece as unwanted
     // should cause the piece to become unwanted
@@ -293,26 +276,22 @@ TEST_F(FilePieceMapTest, wanted)
     files_wanted.set(6, false);
     expected_files_wanted.setSpan(1, 7, false);
     expected_pieces_wanted.unset(5);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     // but as soon as any of them is turned back to wanted,
     // the piece should pop back.
     files_wanted.set(6, true);
     expected_files_wanted.set(6, true);
     expected_pieces_wanted.set(5);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     files_wanted.set(5, true);
     files_wanted.set(6, false);
     expected_files_wanted.set(5);
     expected_files_wanted.unset(6);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
     files_wanted.set(4, true);
     files_wanted.set(5, false);
     expected_files_wanted.set(4);
     expected_files_wanted.unset(5);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // Prep for the next test: set all files to unwanted priority
@@ -340,7 +319,6 @@ TEST_F(FilePieceMapTest, wanted)
     files_wanted.set(16, true);
     expected_files_wanted.set(16);
     expected_pieces_wanted.set(10);
-    std::cerr << __FILE__ << ':' << __LINE__ << std::endl;
     compare_to_expected();
 
     // test the batch API
