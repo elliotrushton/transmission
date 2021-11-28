@@ -1893,9 +1893,9 @@ static int clientGotBlock(tr_peerMsgsImpl* msgs, struct evbuffer* data, struct p
         return EBADMSG;
     }
 
-    if (req->length != msgs->torrent->countBytesInBlock(block))
+    if (req->length != msgs->torrent->blockSize(block))
     {
-        dbgmsg(msgs, "wrong block size -- expected %u, got %d", msgs->torrent->countBytesInBlock(block), req->length);
+        dbgmsg(msgs, "wrong block size -- expected %u, got %d", msgs->torrent->blockSize(block), req->length);
         return EMSGSIZE;
     }
 
@@ -2085,7 +2085,6 @@ static void updateBlockRequests(tr_peerMsgsImpl* msgs)
     TR_ASSERT(msgs->is_client_interested());
     TR_ASSERT(!msgs->is_client_choked());
 
-    // std::cout << __FILE__ << ':' << __LINE__ << " wants " << n_wanted << " blocks to request" << std::endl;
     for (auto const span : tr_peerMgrGetNextRequests(msgs->torrent, msgs, n_wanted))
     {
         for (tr_block_index_t block = span.begin; block < span.end; ++block)
@@ -2093,7 +2092,6 @@ static void updateBlockRequests(tr_peerMsgsImpl* msgs)
             protocolSendRequest(msgs, blockToReq(msgs->torrent, block));
         }
 
-        // std::cout << __FILE__ << ':' << __LINE__ << " peer " << (void*)msgs << " requested " << span.end - span.begin << " blocks" << std::endl;
         tr_peerMgrClientSentRequests(msgs->torrent, msgs, span);
     }
 }

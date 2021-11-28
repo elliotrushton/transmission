@@ -147,7 +147,7 @@ static void fire_client_got_rejs(tr_torrent* tor, tr_webseed* w, tr_block_index_
     {
         if (i == count)
         {
-            e.length = tor->countBytesInBlock(block + count - 1);
+            e.length = tor->blockSize(block + count - 1);
         }
 
         publish(w, &e);
@@ -165,7 +165,7 @@ static void fire_client_got_blocks(tr_torrent* tor, tr_webseed* w, tr_block_inde
     {
         if (i == count)
         {
-            e.length = tor->countBytesInBlock(block + count - 1);
+            e.length = tor->blockSize(block + count - 1);
         }
 
         publish(w, &e);
@@ -373,7 +373,7 @@ static void on_idle(tr_webseed* w)
             task->block = begin;
             task->piece_index = tor->pieceForBlock(begin);
             task->piece_offset = tor->block_size * begin - tor->info.pieceSize * task->piece_index;
-            task->length = (end - 1 - begin) * tor->block_size + tor->countBytesInBlock(end - 1);
+            task->length = (end - 1 - begin) * tor->block_size + tor->blockSize(end - 1);
             task->blocks_done = 0;
             task->response_code = 0;
             task->block_size = tor->block_size;
@@ -481,16 +481,16 @@ static void web_response_func(
     }
 }
 
-static std::string make_url(tr_webseed* w, tr_file const* file)
+static std::string make_url(tr_webseed* w, char const* name)
 {
     struct evbuffer* buf = evbuffer_new();
 
     evbuffer_add(buf, std::data(w->base_url), std::size(w->base_url));
 
     /* if url ends with a '/', add the torrent name */
-    if (*std::rbegin(w->base_url) == '/' && file->name != nullptr)
+    if (*std::rbegin(w->base_url) == '/' && name != nullptr)
     {
-        tr_http_escape(buf, file->name, false);
+        tr_http_escape(buf, name, false);
     }
 
     auto url = std::string{ (char const*)evbuffer_pullup(buf, -1), evbuffer_get_length(buf) };
@@ -518,12 +518,12 @@ static void task_request_next_chunk(struct tr_webseed_task* t)
         auto file_offset = uint64_t{};
         tr_ioFindFileLocation(tor, step_piece, step_piece_offset, &file_index, &file_offset);
 
-        tr_file const* const file = &inf->files[file_index];
-        uint64_t this_pass = std::min(remain, file->length - file_offset);
+        auto const& file = inf->files[file_index];
+        uint64_t this_pass = std::min(remain, file.length - file_offset);
 
         if (std::empty(urls[file_index]))
         {
-            urls[file_index] = make_url(t->webseed, file);
+            urls[file_index] = make_url(t->webseed, file.name);
         }
 
         char range[64];

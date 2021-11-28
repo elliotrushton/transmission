@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "transmission.h"
@@ -30,7 +31,7 @@ uint64_t tr_completion::computeHasValid() const
     {
         if (hasPiece(piece))
         {
-            size += block_info_->countBytesInPiece(piece);
+            size += block_info_->pieceSize(piece);
         }
     }
 
@@ -60,7 +61,7 @@ uint64_t tr_completion::computeSizeWhenDone() const
     {
         if (!tor_->pieceIsDnd(piece))
         {
-            size += block_info_->countBytesInPiece(piece);
+            size += block_info_->pieceSize(piece);
         }
         else
         {
@@ -106,7 +107,7 @@ size_t tr_completion::countMissingBlocksInPiece(tr_piece_index_t piece) const
 
 size_t tr_completion::countMissingBytesInPiece(tr_piece_index_t piece) const
 {
-    return block_info_->countBytesInPiece(piece) - countHasBytesInSpan(block_info_->blockSpanForPiece(piece));
+    return block_info_->pieceSize(piece) - countHasBytesInSpan(block_info_->blockSpanForPiece(piece));
 }
 
 tr_completeness tr_completion::status() const
@@ -134,13 +135,12 @@ std::vector<uint8_t> tr_completion::createPieceBitfield() const
     size_t const n = block_info_->n_pieces;
     auto pieces = tr_bitfield{ n };
 
-    bool* const flags = new bool[n];
+    auto flags = std::make_unique<bool[]>(n);
     for (tr_piece_index_t piece = 0; piece < n; ++piece)
     {
         flags[piece] = hasPiece(piece);
     }
-    pieces.setFromBools(flags, n);
-    delete[] flags;
+    pieces.setFromBools(flags.get(), n);
 
     return pieces.raw();
 }
@@ -155,7 +155,7 @@ void tr_completion::addBlock(tr_block_index_t block)
     }
 
     blocks_.set(block);
-    size_now_ += block_info_->countBytesInBlock(block);
+    size_now_ += block_info_->blockSize(block);
 
     has_valid_.reset();
 }

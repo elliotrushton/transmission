@@ -136,7 +136,7 @@ public:
     {
     }
 
-    virtual ~tr_torrent() = default;
+    virtual ~tr_torrent() override = default;
 
     void setLocation(
         std::string_view location,
@@ -163,7 +163,6 @@ public:
     // private:
     void swapMetainfo(tr_metainfo_parsed& parsed);
 
-public:
     auto unique_lock() const
     {
         return session->unique_lock();
@@ -326,7 +325,7 @@ public:
             auto const found = this->findFile(filename, i);
             auto const mtime = found ? found->last_modified_at : 0;
 
-            info.files[i].mtime = mtime;
+            info.files[i].priv.mtime = mtime;
 
             // if a file has changed, mark its pieces as unchecked
             if (mtime == 0 || mtime != mtimes[i])
@@ -356,7 +355,6 @@ public:
 
     std::optional<tr_found_file_t> findFile(std::string& filename, tr_file_index_t i) const;
 
-public:
     tr_info info = {};
 
     tr_bitfield checked_pieces_ = tr_bitfield{ 0 };

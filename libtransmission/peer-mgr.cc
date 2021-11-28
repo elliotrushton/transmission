@@ -506,8 +506,8 @@ void tr_peerMgrSetUtpFailed(tr_torrent* tor, tr_address const* addr, bool failed
 ***
 *** 1. tr_swarm::active_requests, an opaque class that tracks what requests
 ***    we currently have, i.e. which blocks and from which peers.
-***    This is used for (a) cancelling requests that have been waiting
-***    for too long and (b) avoiding duplicate requests.
+***    This is used for cancelling requests that have been waiting
+***    for too long and avoiding duplicate requests.
 ***
 *** 2. tr_swarm::pieces, an array of "struct weighted_piece" which lists the
 ***    pieces that we want to request. It's used to decide which blocks to
@@ -541,7 +541,6 @@ static int countActiveWebseeds(tr_swarm* s)
 // TODO: if we keep this, add equivalent API to ActiveRequest
 void tr_peerMgrClientSentRequests(tr_torrent* torrent, tr_peer* peer, tr_block_span_t span)
 {
-    // std::cout << __FILE__ << ':' << __LINE__ << " tr_peerMgrClientSentRequests [" << range.begin << "..." << range.end << ')' << std::endl;
     auto const now = tr_time();
 
     for (tr_block_index_t block = span.begin; block < span.end; ++block)
@@ -568,6 +567,8 @@ std::vector<tr_block_span_t> tr_peerMgrGetNextRequests(tr_torrent* torrent, tr_p
             , peer_{ peer_in }
         {
         }
+
+        ~PeerInfoImpl() override = default;
 
         bool clientCanRequestBlock(tr_block_index_t block) const override
         {
@@ -732,7 +733,7 @@ static void peerSuggestedPiece(tr_swarm* /*s*/, tr_peer* /*peer*/, tr_piece_inde
             if (tor->hasBlock(b))
             {
                 uint32_t const offset = getBlockOffsetInPiece(tor, b);
-                uint32_t const length = tor->countBytesInBlock(b);
+                uint32_t const length = tor->blockSize(b);
                 tr_peerMsgsAddRequest(peer->msgs, pieceIndex, offset, length);
                 incrementPieceRequests(t, pieceIndex);
             }
@@ -762,7 +763,7 @@ void tr_peerMgrPieceCompleted(tr_torrent* tor, tr_piece_index_t p)
 
     if (pieceCameFromPeers) /* webseed downloads don't belong in announce totals */
     {
-        tr_announcerAddBytes(tor, TR_ANN_DOWN, tor->countBytesInPiece(p));
+        tr_announcerAddBytes(tor, TR_ANN_DOWN, tor->pieceSize(p));
     }
 
     /* bookkeeping */
@@ -1243,7 +1244,7 @@ tr_pex* tr_peerMgrCompact6ToPex(
 void tr_peerMgrGotBadPiece(tr_torrent* tor, tr_piece_index_t pieceIndex)
 {
     tr_swarm* s = tor->swarm;
-    uint32_t const byteCount = tor->countBytesInPiece(pieceIndex);
+    uint32_t const byteCount = tor->pieceSize(pieceIndex);
 
     for (int i = 0, n = tr_ptrArraySize(&s->peers); i != n; ++i)
     {
