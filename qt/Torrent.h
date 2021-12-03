@@ -96,23 +96,23 @@ using TrackerStatsList = std::vector<TrackerStat>;
 
 struct TorrentFile
 {
-    bool wanted = true;
-    int index = -1;
-    int priority = 0;
     QString filename;
     uint64_t size = 0;
     uint64_t have = 0;
+    int index = -1;
+    int priority = 0;
+    bool wanted = true;
 };
 
 using FileList = std::vector<TorrentFile>;
 
 class TorrentHash
 {
-private:
-    std::array<uint8_t, SHA_DIGEST_LENGTH> data_ = {};
-
 public:
-    TorrentHash()
+    TorrentHash() = default;
+
+    explicit TorrentHash(tr_sha1_digest_t const& data)
+        : data_(data)
     {
     }
 
@@ -143,10 +143,13 @@ public:
 
     QString toString() const
     {
-        char str[SHA_DIGEST_LENGTH * 2 + 1];
-        tr_sha1_to_hex(str, data_.data());
-        return QString::fromUtf8(str, SHA_DIGEST_LENGTH * 2);
+        auto str = tr_sha1_digest_string_t{};
+        tr_sha1_to_hex(std::data(str), std::data(data_));
+        return QString::fromUtf8(std::data(str));
     }
+
+private:
+    tr_sha1_digest_t data_;
 };
 
 class Torrent : public QObject
