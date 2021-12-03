@@ -25,16 +25,22 @@
 #include <libtransmission/tr-getopt.h>
 #include <libtransmission/tr-macros.h>
 #include <libtransmission/utils.h>
+#include <libtransmission/variant.h>
 #include <libtransmission/version.h>
 #include <libtransmission/web-utils.h>
 
 #include "units.h"
 
-#define MY_NAME "transmission-show"
-#define TIMEOUT_SECS 30
+using namespace std::literals;
 
 namespace
 {
+
+auto constexpr TimeoutSecs = long{ 30 };
+
+char constexpr MyName[] = "transmission-show";
+char constexpr Usage[] = "Usage: transmission-show [options] <.torrent file>";
+char constexpr UserAgent[] = "transmission-show/" LONG_VERSION_STRING;
 
 auto options = std::array<tr_option, 5>{
     { { 'm', "magnet", "Give a magnet link for the specified torrent", "m", false, nullptr },
@@ -43,11 +49,6 @@ auto options = std::array<tr_option, 5>{
       { 'V', "version", "Show version number and exit", "V", false, nullptr },
       { 0, nullptr, nullptr, nullptr, false, nullptr } }
 };
-
-char const* getUsage()
-{
-    return "Usage: " MY_NAME " [options] <.torrent file>";
-}
 
 auto filename_opt = std::string_view{};
 auto magnet_opt = bool{ false };
@@ -60,7 +61,7 @@ int parseCommandLine(int argc, char const* const* argv)
     int c;
     char const* optarg;
 
-    while ((c = tr_getopt(getUsage(), argc, argv, std::data(options), &optarg)) != TR_OPT_DONE)
+    while ((c = tr_getopt(Usage, argc, argv, std::data(options), &optarg)) != TR_OPT_DONE)
     {
         switch (c)
         {
@@ -195,7 +196,6 @@ void showInfo(tr_torrent_metainfo const& metainfo)
     }
 }
 
-#if 0
 size_t writeFunc(void* ptr, size_t size, size_t nmemb, void* vbuf)
 {
     auto* buf = static_cast<evbuffer*>(vbuf);
@@ -207,7 +207,7 @@ size_t writeFunc(void* ptr, size_t size, size_t nmemb, void* vbuf)
 CURL* tr_curl_easy_init(struct evbuffer* writebuf)
 {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, MY_NAME "/" LONG_VERSION_STRING);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, UserAgent);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeFunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, writebuf);
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
@@ -215,39 +215,35 @@ CURL* tr_curl_easy_init(struct evbuffer* writebuf)
     curl_easy_setopt(curl, CURLOPT_ENCODING, "");
     return curl;
 }
-#endif
 
-void doScrape(tr_torrent_metainfo const& /*metainfo*/)
+void doScrape(tr_torrent_metainfo const& metainfo)
 {
-    // FIXME
-#if 0
-    for (unsigned int i = 0; i < inf->trackerCount; ++i)
+    for (auto& tier : metainfo.tiers())
     {
-        CURL* curl;
-        CURLcode res;
-        struct evbuffer* buf;
-        char const* scrape = inf->trackers[i].scrape;
-        char* url;
-        auto escaped = std::array<SHA_DIGEST_LENGTH * 3 + 1, char>{};
-
-        if (scrape == nullptr)
+        auto const& tracker = *std::begin(tier);
+        if (tracker.scrape_url == TR_KEY_NONE)
         {
             continue;
         }
 
-        tr_http_escape_sha1(std::data(escaped), inf->hash);
-
-        url = tr_strdup_printf("%s%cinfo_hash=%s", scrape, strchr(scrape, '?') != nullptr ? '&' : '?', escaped);
-
-        printf("%s ... ", url);
+        // build the full scrape URL
+        auto escaped = std::array<char, TR_SHA1_DIGEST_LEN * 3 + 1>{};
+        tr_http_escape_sha1(std::data(escaped), metainfo.infoHash());
+        auto const url = tr_strvJoin(
+            tracker.scrape_url_str,
+            (tr_strvContains(tracker.scrape_url_str, '?') ? "&"sv : "?"sv),
+            "info_hash="sv,
+            std::data(escaped));
+        printf("%" TR_PRIsv " ... ", TR_PRIsv_ARG(url));
         fflush(stdout);
 
-        buf = evbuffer_new();
-        curl = tr_curl_easy_init(buf);
-        curl_easy_setopt(curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT_SECS);
+        auto* const buf = evbuffer_new();
+        auto* curl = tr_curl_easy_init(buf);
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, TimeoutSecs);
 
-        if ((res = curl_easy_perform(curl)) != CURLE_OK)
+        auto const res = curl_easy_perform(curl);
+        if (res != CURLE_OK)
         {
             printf("error: %s\n", curl_easy_strerror(res));
         }
@@ -275,9 +271,12 @@ void doScrape(tr_torrent_metainfo const& /*metainfo*/)
                         tr_quark key;
                         tr_variant* val;
 
+                        auto hashsv = std::string_view{ reinterpret_cast<char const*>(std::data(metainfo.infoHash())),
+                                                        std::size(metainfo.infoHash()) };
+
                         while (tr_variantDictChild(files, child_pos, &key, &val))
                         {
-                            if (memcmp(inf->hash, tr_quark_get_string(key), SHA_DIGEST_LENGTH) == 0)
+                            if (hashsv == tr_quark_get_string_view(key))
                             {
                                 int64_t seeders;
                                 if (!tr_variantDictFindInt(val, TR_KEY_complete, &seeders))
@@ -311,9 +310,7 @@ void doScrape(tr_torrent_metainfo const& /*metainfo*/)
 
         curl_easy_cleanup(curl);
         evbuffer_free(buf);
-        tr_free(url);
     }
-#endif
 }
 
 } // namespace
@@ -332,7 +329,7 @@ int tr_main(int argc, char* argv[])
 
     if (show_version_opt)
     {
-        fprintf(stderr, "%s %s\n", MY_NAME, LONG_VERSION_STRING);
+        fprintf(stderr, "%s %s\n", MyName, LONG_VERSION_STRING);
         return EXIT_SUCCESS;
     }
 
@@ -340,7 +337,7 @@ int tr_main(int argc, char* argv[])
     if (std::empty(filename_opt))
     {
         fprintf(stderr, "ERROR: No .torrent file specified.\n");
-        tr_getopt_usage(MY_NAME, getUsage(), std::data(options));
+        tr_getopt_usage(MyName, Usage, std::data(options));
         fprintf(stderr, "\n");
         return EXIT_FAILURE;
     }
