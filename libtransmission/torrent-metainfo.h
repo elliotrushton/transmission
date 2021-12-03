@@ -74,8 +74,6 @@ protected:
         }
     };
 
-    bool addTracker(tr_tracker_tier_t tier, std::string_view announce_url);
-
     enum class FilenameFormat
     {
         NameAndParitalHash,

@@ -19,6 +19,7 @@
 #include "error-types.h"
 #include "error.h"
 #include "torrent-metainfo.h"
+#include "tr-assert.h"
 #include "utils.h"
 #include "variant.h"
 #include "web-utils.h"
@@ -64,9 +65,10 @@ tr_piece_index_t getBytePiece(tr_torrent_metainfo const& tm, uint64_t byte_offse
 }
 #endif
 
-#if 0
 /* this base32 code converted from code by Robert Kaye and Gordon Mohr
  * and is public domain. see http://bitzi.com/publicdomain for more info */
+namespace
+{
 namespace bitzi
 {
 
@@ -89,7 +91,7 @@ void base32_to_sha1(uint8_t* out, char const* in, size_t const inlen)
 
     size_t const outlen = 20;
 
-    memset(out, 0, 20);
+    std::fill_n(out, 20, 0);
 
     size_t index = 0;
     size_t offset = 0;
@@ -147,7 +149,7 @@ void base32_to_sha1(uint8_t* out, char const* in, size_t const inlen)
 }
 
 } // namespace bitzi
-#endif
+} // namespace
 
 /// tr_new_magnet_metainfo
 
@@ -182,7 +184,6 @@ std::string tr_new_magnet_metainfo::magnet() const
     return s;
 }
 
-#if 0
 static tr_quark announceToScrape(std::string_view announce)
 {
     auto buf = std::string{};
@@ -194,26 +195,7 @@ static tr_quark announceToScrape(std::string_view announce)
 
     return tr_quark_new(buf);
 }
-#endif
 
-#if 0
-bool tr_new_magnet_metainfo::addTracker(tr_tracker_tier_t tier, std::string_view announce_sv)
-{
-    announce_sv = tr_strvStrip(announce_sv);
-
-    if (!tr_urlIsValidTracker(announce_sv))
-    {
-        return false;
-    }
-
-    auto const announce_url = tr_quark_new(announce_sv);
-    auto const scrape_url = announceToScrape(announce_sv);
-    this->trackers.insert({ tier, { announce_url, scrape_url, tier } });
-    return true;
-}
-#endif
-
-#if 0
 bool tr_new_magnet_metainfo::parseMagnet(std::string_view magnet_link, tr_error** error)
 {
     auto const parsed = tr_urlParse(magnet_link);
@@ -224,18 +206,22 @@ bool tr_new_magnet_metainfo::parseMagnet(std::string_view magnet_link, tr_error*
     }
 
     bool got_checksum = false;
-    auto tier = tr_tracker_tier_t{ 0 };
     for (auto const& [key, value] : tr_url_query_view{ parsed->query })
     {
         if (key == "dn"sv)
         {
-            this->name = tr_urlPercentDecode(value);
+            this->name_ = tr_urlPercentDecode(value);
         }
         else if (key == "tr"sv || tr_strvStartsWith(key, "tr."sv))
         {
             // "tr." explanation @ https://trac.transmissionbt.com/ticket/3341
-            addTracker(tier, tr_urlPercentDecode(value));
-            ++tier;
+            auto announce = tr_urlPercentDecode(value);
+            if (tr_urlIsValidTracker(announce))
+            {
+                auto tier = tier_t{};
+                tier.emplace(tr_quark_new(announce), announceToScrape(announce));
+                this->tiers_.emplace_back(tier);
+            }
         }
         else if (key == "ws"sv)
         {
@@ -243,7 +229,7 @@ bool tr_new_magnet_metainfo::parseMagnet(std::string_view magnet_link, tr_error*
             auto const url_sv = tr_strvStrip(url);
             if (tr_urlIsValid(url_sv))
             {
-                this->webseed_urls.emplace_back(url_sv);
+                this->webseed_urls_.emplace_back(url_sv);
             }
         }
         else if (key == "xt"sv)
@@ -255,13 +241,13 @@ bool tr_new_magnet_metainfo::parseMagnet(std::string_view magnet_link, tr_error*
                 switch (std::size(hash))
                 {
                 case 40:
-                    tr_hex_to_sha1(std::data(this->info_hash), std::data(hash));
+                    tr_hex_to_sha1(std::data(this->info_hash_), std::data(hash));
                     got_checksum = true;
                     break;
 
                 case 32:
                     bitzi::base32_to_sha1(
-                        reinterpret_cast<uint8_t*>(std::data(this->info_hash)),
+                        reinterpret_cast<uint8_t*>(std::data(this->info_hash_)),
                         std::data(hash),
                         std::size(hash));
                     got_checksum = true;
@@ -276,7 +262,6 @@ bool tr_new_magnet_metainfo::parseMagnet(std::string_view magnet_link, tr_error*
 
     return got_checksum;
 }
-#endif
 
 #if 0
 std::string tr_new_magnet_metainfo::makeFilename(std::string_view dirname, FilenameFormat format, std::string_view suffix) const
