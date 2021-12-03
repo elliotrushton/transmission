@@ -57,6 +57,7 @@ set(PROJECT_FILES
   subprocess-win32.cc
   torrent-ctor.cc
   torrent-magnet.cc
+  torrent-metainfo.cc
   torrent.cc
   tr-assert.cc
   tr-dht.cc
@@ -134,6 +135,7 @@ set(${PROJECT_NAME}_PUBLIC_HEADERS
     tr-assert.h
     tr-getopt.h
     tr-macros.h
+    torrent-metainfo.h
     transmission.h
     utils.h
     variant.h
