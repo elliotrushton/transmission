@@ -1893,7 +1893,7 @@
 				ED8A16412735A8AA000D61F9 /* peer-mgr-wishlist.h in Headers */,
 				4D8017EB10BBC073008A4AF2 /* torrent-magnet.h in Headers */,
 				4D80185A10BBC0B0008A4AF2 /* magnet-metainfo.h in Headers */,
-				C1D2EE71DB054A0E9083C4E1 /* torrent-metainfo.h in Headers */
+				C1D2EE71DB054A0E9083C4E1 /* torrent-metainfo.h in Headers */,
 				A209EE5D1144B51E002B02D1 /* history.h in Headers */,
 				A247A443114C701800547DFC /* InfoViewController.h in Headers */,
 				A220EC5C118C8A060022B4BE /* tr-lpd.h in Headers */,
@@ -2489,7 +2489,7 @@
 				A25964A6106D73A800453B31 /* announcer.cc in Sources */,
 				4D8017EA10BBC073008A4AF2 /* torrent-magnet.cc in Sources */,
 				4D80185910BBC0B0008A4AF2 /* magnet-metainfo.cc in Sources */,
-				C1D2EE71DB054A0E9083C4E0 /* torrent-metainfo.cc in Sources */
+				C1D2EE71DB054A0E9083C4E0 /* torrent-metainfo.cc in Sources */,
 				A220EC5B118C8A060022B4BE /* tr-lpd.cc in Sources */,
 				C1FEE57A1C3223CC00D62832 /* watchdir.cc in Sources */,
 				A23547E211CD0B090046EAE6 /* cache.cc in Sources */,
