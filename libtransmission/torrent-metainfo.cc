@@ -6,9 +6,10 @@
  *
  */
 
+#include <iterator>
+#include <map>
 #include <string>
 #include <string_view>
-#include <map>
 #include <vector>
 
 #include <event2/util.h> // evutil_ascii_strncasecmp
