@@ -1102,8 +1102,9 @@ static void removeKeRangerRansomware()
         }
 
         //determine to show the options window
+        auto const is_multifile = std::size(metainfo.files()) > 1;
         BOOL const showWindow = type == ADD_SHOW_OPTIONS ||
-            ([fDefaults boolForKey:@"DownloadAsk"] && (info.isFolder || ![fDefaults boolForKey:@"DownloadAskMulti"]) &&
+            ([fDefaults boolForKey:@"DownloadAsk"] && (is_multifile || ![fDefaults boolForKey:@"DownloadAskMulti"]) &&
              (type != ADD_AUTO || ![fDefaults boolForKey:@"DownloadAskManual"]));
         tr_metainfoFree(&info);
 
