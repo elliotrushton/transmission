@@ -1106,7 +1106,6 @@ static void removeKeRangerRansomware()
         BOOL const showWindow = type == ADD_SHOW_OPTIONS ||
             ([fDefaults boolForKey:@"DownloadAsk"] && (is_multifile || ![fDefaults boolForKey:@"DownloadAskMulti"]) &&
              (type != ADD_AUTO || ![fDefaults boolForKey:@"DownloadAskManual"]));
-        tr_metainfoFree(&info);
 
         Torrent* torrent;
         if (!(torrent = [[Torrent alloc] initWithPath:torrentPath location:location
