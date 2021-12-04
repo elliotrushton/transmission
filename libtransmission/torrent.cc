@@ -52,6 +52,7 @@
 #include "subprocess.h"
 #include "torrent-magnet.h"
 #include "torrent.h"
+#include "torrent-metainfo.h"
 #include "tr-assert.h"
 #include "trevent.h" /* tr_runInEventThread() */
 #include "utils.h"
@@ -108,6 +109,16 @@ tr_torrent* tr_torrentFindFromHash(tr_session* session, uint8_t const* hash)
     auto& src = session->torrentsByHash;
     auto it = src.find(hash);
     return it == std::end(src) ? nullptr : it->second;
+}
+
+tr_torrent* tr_torrentFindFromMetainfo(tr_session* session, tr_torrent_metainfo const* metainfo)
+{
+    if (metainfo == nullptr)
+    {
+        return nullptr;
+    }
+
+    return tr_torrentFindFromHash(session, reinterpret_cast<uint8_t const*>(std::data(metainfo->infoHash())));
 }
 
 tr_torrent* tr_torrentFindFromHash(tr_session* session, tr_sha1_digest_t const& info_dict_hash)

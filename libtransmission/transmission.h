@@ -27,6 +27,7 @@
 
 #include "tr-macros.h"
 
+// FIXME(ckerr): 'using' is not portable to C
 using tr_file_index_t = uint32_t;
 using tr_piece_index_t = uint32_t;
 /* assuming a 16 KiB block, a 32-bit block index gives us a maximum torrent size of 63 TiB.
@@ -42,11 +43,12 @@ struct tr_block_span_t
 };
 
 struct tr_ctor;
-struct tr_file;
 struct tr_error;
+struct tr_file;
 struct tr_info;
 struct tr_session;
 struct tr_torrent;
+struct tr_torrent_metainfo;
 struct tr_variant;
 
 using tr_priority_t = int8_t;
@@ -1074,6 +1076,8 @@ uint64_t tr_torrentGetBytesLeftToAllocate(tr_torrent const* torrent);
 int tr_torrentId(tr_torrent const* torrent);
 
 tr_torrent* tr_torrentFindFromId(tr_session* session, int id);
+
+tr_torrent* tr_torrentFindFromMetainfo(tr_session*, tr_torrent_metainfo const*);
 
 tr_torrent* tr_torrentFindFromHash(tr_session* session, uint8_t const* hash);
 
