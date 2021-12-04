@@ -23,7 +23,7 @@ struct tr_error;
 struct tr_info;
 struct tr_variant;
 
-class tr_new_magnet_metainfo
+struct tr_new_magnet_metainfo
 {
 public:
     bool parseMagnet(std::string_view magnet_link, tr_error** error = nullptr);
@@ -84,17 +84,13 @@ protected:
 
     using tier_t = std::set<tracker_t>;
     std::vector<tier_t> tiers_;
-    std::vector<tier_t> const& tiers()
-    {
-        return tiers_;
-    }
     std::vector<std::string> webseed_urls_;
     std::string name_;
     tr_sha1_digest_string_t info_hash_chars_;
     tr_sha1_digest_t info_hash_;
 };
 
-class tr_torrent_metainfo : public tr_new_magnet_metainfo
+struct tr_torrent_metainfo : public tr_new_magnet_metainfo
 {
 public:
     ~tr_torrent_metainfo() override = default;

@@ -6,18 +6,22 @@
  *
  */
 
-#include "transmission.h"
-#include "crypto-utils.h"
-#include "file.h"
-#include "makemeta.h"
-#include "utils.h" // tr_free()
-
-#include "test-fixtures.h"
-
 #include <array>
 #include <cstdlib> // mktemp()
 #include <cstring> // strlen()
+#include <numeric>
 #include <string>
+#include <string_view>
+
+#include "transmission.h"
+
+#include "crypto-utils.h"
+#include "file.h"
+#include "makemeta.h"
+#include "torrent-metainfo.h"
+#include "utils.h"
+
+#include "test-fixtures.h"
 
 using namespace std::literals;
 
@@ -31,14 +35,14 @@ class MakemetaTest : public SandboxedTest
 {
 protected:
     void testSingleFileImpl(
-        tr_info& inf,
+        tr_torrent_metainfo& metainfo,
         tr_tracker_info const* trackers,
         int const trackerCount,
         void const* payload,
         size_t const payloadSize,
         char const* comment,
         bool isPrivate,
-        char const* source)
+        std::string_view source)
     {
 
         // create a single input file
@@ -56,36 +60,37 @@ protected:
 
         // have tr_makeMetaInfo() build the .torrent file
         auto const torrent_file = tr_strvJoin(input_file, ".torrent");
-        tr_makeMetaInfo(builder, torrent_file.c_str(), trackers, trackerCount, comment, isPrivate, source);
+        tr_makeMetaInfo(builder, torrent_file.c_str(), trackers, trackerCount, comment, isPrivate, std::string(source).c_str());
         EXPECT_EQ(isPrivate, builder->isPrivate);
         EXPECT_EQ(torrent_file, builder->outputFile);
         EXPECT_STREQ(comment, builder->comment);
-        EXPECT_STREQ(source, builder->source);
+        EXPECT_EQ(source, builder->source);
         EXPECT_EQ(trackerCount, builder->trackerCount);
 
         while (!builder->isDone)
         {
             tr_wait_msec(100);
         }
+        sync();
 
         // now let's check our work: parse the  .torrent file
-        auto* ctor = tr_ctorNew(nullptr);
-        sync();
-        tr_ctorSetMetainfoFromFile(ctor, torrent_file.c_str());
-        auto const parse_result = tr_torrentParse(ctor, &inf);
-        EXPECT_EQ(TR_PARSE_OK, parse_result);
+        EXPECT_TRUE(metainfo.parseTorrentFile(torrent_file));
 
         // quick check of some of the parsed metainfo
-        EXPECT_EQ(payloadSize, inf.totalSize);
-        EXPECT_EQ(makeString(tr_sys_path_basename(input_file.data(), nullptr)), inf.name);
-        EXPECT_STREQ(comment, inf.comment);
-        EXPECT_EQ(tr_file_index_t{ 1 }, inf.fileCount);
-        EXPECT_EQ(isPrivate, inf.isPrivate);
-        EXPECT_FALSE(inf.isFolder);
-        EXPECT_EQ(trackerCount, inf.trackerCount);
+        EXPECT_EQ(payloadSize, metainfo.blockInfo().total_size);
+        EXPECT_EQ(makeString(tr_sys_path_basename(input_file.data(), nullptr)), metainfo.name());
+        EXPECT_EQ(comment, metainfo.comment());
+        EXPECT_EQ(tr_file_index_t{ 1 }, std::size(metainfo.files()));
+        EXPECT_EQ(isPrivate, metainfo.isPrivate());
+        EXPECT_EQ(
+            size_t(trackerCount),
+            std::accumulate(
+                std::begin(metainfo.tiers()),
+                std::end(metainfo.tiers()),
+                size_t{},
+                [](int sum, auto const& tier) { return sum + std::size(tier); }));
 
         // cleanup
-        tr_ctorFree(ctor);
         tr_metaInfoBuilderFree(builder);
     }
 
@@ -152,27 +157,27 @@ protected:
         sync();
 
         // now let's check our work: parse the  .torrent file
-        auto* ctor = tr_ctorNew(nullptr);
-        tr_ctorSetMetainfoFromFile(ctor, torrent_file.c_str());
-        auto inf = tr_info{};
-        auto parse_result = tr_torrentParse(ctor, &inf);
-        EXPECT_EQ(TR_PARSE_OK, parse_result);
+        auto metainfo = tr_torrent_metainfo{};
+        EXPECT_TRUE(metainfo.parseTorrentFile(torrent_file));
 
         // quick check of some of the parsed metainfo
-        EXPECT_EQ(total_size, inf.totalSize);
+        EXPECT_EQ(total_size, metainfo.blockInfo().total_size);
         auto* tmpstr = tr_sys_path_basename(top.c_str(), nullptr);
-        EXPECT_STREQ(tmpstr, inf.name);
+        EXPECT_EQ(tmpstr, metainfo.name());
         tr_free(tmpstr);
-        EXPECT_STREQ(comment, inf.comment);
-        EXPECT_STREQ(source, inf.source);
-        EXPECT_EQ(payload_count, inf.fileCount);
-        EXPECT_EQ(is_private, inf.isPrivate);
-        EXPECT_EQ(builder->isFolder, inf.isFolder);
-        EXPECT_EQ(tracker_count, inf.trackerCount);
+        EXPECT_EQ(comment, metainfo.comment());
+        EXPECT_EQ(source, metainfo.source());
+        EXPECT_EQ(payload_count, std::size(metainfo.files()));
+        EXPECT_EQ(is_private, metainfo.isPrivate());
+        EXPECT_EQ(
+            size_t(tracker_count),
+            std::accumulate(
+                std::begin(metainfo.tiers()),
+                std::end(metainfo.tiers()),
+                size_t{},
+                [](int sum, auto const& tier) { return sum + std::size(tier); }));
 
         // cleanup
-        tr_ctorFree(ctor);
-        tr_metainfoFree(&inf);
         tr_metaInfoBuilderFree(builder);
     }
 
@@ -233,10 +238,16 @@ TEST_F(MakemetaTest, singleFile)
     auto const payload = std::string{ "Hello, World!\n" };
     char const* const comment = "This is the comment";
     bool const is_private = false;
-    char const* const source = "TESTME";
-    tr_info inf{};
-    testSingleFileImpl(inf, trackers.data(), tracker_count, payload.data(), payload.size(), comment, is_private, source);
-    tr_metainfoFree(&inf);
+    auto metainfo = tr_torrent_metainfo{};
+    testSingleFileImpl(
+        metainfo,
+        trackers.data(),
+        tracker_count,
+        payload.data(),
+        payload.size(),
+        comment,
+        is_private,
+        "TESTME"sv);
 }
 
 TEST_F(MakemetaTest, singleFileDifferentSourceFlags)
@@ -253,32 +264,29 @@ TEST_F(MakemetaTest, singleFileDifferentSourceFlags)
     char const* const comment = "This is the comment";
     bool const is_private = false;
 
-    tr_info inf_foobar{};
+    auto metainfo_foobar = tr_torrent_metainfo{};
     testSingleFileImpl(
-        inf_foobar,
+        metainfo_foobar,
         trackers.data(),
         tracker_count,
         payload.data(),
         payload.size(),
         comment,
         is_private,
-        "FOOBAR");
+        "FOOBAR"sv);
 
-    tr_info inf_testme{};
+    auto metainfo_testme = tr_torrent_metainfo{};
     testSingleFileImpl(
-        inf_testme,
+        metainfo_testme,
         trackers.data(),
         tracker_count,
         payload.data(),
         payload.size(),
         comment,
         is_private,
-        "TESTME");
+        "TESTME"sv);
 
-    EXPECT_TRUE(std::memcmp(inf_foobar.hash, inf_testme.hash, sizeof(inf_foobar.hash)) != 0);
-
-    tr_metainfoFree(&inf_foobar);
-    tr_metainfoFree(&inf_testme);
+    EXPECT_NE(metainfo_foobar.infoHash(), metainfo_testme.infoHash());
 }
 
 TEST_F(MakemetaTest, singleDirectoryRandomPayload)
