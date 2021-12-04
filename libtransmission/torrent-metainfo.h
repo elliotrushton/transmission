@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <map>
 #include <set>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -47,6 +47,8 @@ public:
         return webseed_urls_;
     }
     std::string_view infoHashString() const;
+
+    size_t trackerCount() const;
 
     virtual tr_info* toInfo() const;
 

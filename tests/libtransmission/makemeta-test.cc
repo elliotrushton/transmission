@@ -9,7 +9,6 @@
 #include <array>
 #include <cstdlib> // mktemp()
 #include <cstring> // strlen()
-#include <numeric>
 #include <string>
 #include <string_view>
 
@@ -82,13 +81,7 @@ protected:
         EXPECT_EQ(comment, metainfo.comment());
         EXPECT_EQ(tr_file_index_t{ 1 }, std::size(metainfo.files()));
         EXPECT_EQ(isPrivate, metainfo.isPrivate());
-        EXPECT_EQ(
-            size_t(trackerCount),
-            std::accumulate(
-                std::begin(metainfo.tiers()),
-                std::end(metainfo.tiers()),
-                size_t{},
-                [](int sum, auto const& tier) { return sum + std::size(tier); }));
+        EXPECT_EQ(size_t(trackerCount), metainfo.trackerCount());
 
         // cleanup
         tr_metaInfoBuilderFree(builder);
@@ -169,13 +162,7 @@ protected:
         EXPECT_EQ(source, metainfo.source());
         EXPECT_EQ(payload_count, std::size(metainfo.files()));
         EXPECT_EQ(is_private, metainfo.isPrivate());
-        EXPECT_EQ(
-            size_t(tracker_count),
-            std::accumulate(
-                std::begin(metainfo.tiers()),
-                std::end(metainfo.tiers()),
-                size_t{},
-                [](int sum, auto const& tier) { return sum + std::size(tier); }));
+        EXPECT_EQ(size_t(tracker_count), metainfo.trackerCount());
 
         // cleanup
         tr_metaInfoBuilderFree(builder);

@@ -7,7 +7,7 @@
  */
 
 #include <iterator>
-#include <map>
+#include <numeric>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -468,6 +468,15 @@ void tr_metainfoMigrateFile(
 /***
 ****
 ***/
+
+size_t tr_new_magnet_metainfo::trackerCount() const
+{
+    return std::accumulate(
+        std::begin(tiers_),
+        std::end(tiers_),
+        size_t{},
+        [](int sum, auto const& tier) { return sum + std::size(tier); });
+}
 
 /**
  * @brief Ensure that the URLs for multfile torrents end in a slash.
