@@ -105,6 +105,18 @@ public:
     {
         return block_info_;
     }
+    auto pieceCount() const
+    {
+        return block_info_.n_pieces;
+    }
+    auto pieceSize() const
+    {
+        return block_info_.piece_size;
+    }
+    auto totalSize() const
+    {
+        return block_info_.total_size;
+    }
     auto const& comment() const
     {
         return comment_;
