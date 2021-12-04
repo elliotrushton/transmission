@@ -69,7 +69,7 @@ OSStatus GeneratePreviewForURL(void* thisInterface, QLPreviewRequestRef preview,
 
     NSString* name = [NSString stringWithUTF8String:metainfo.name().c_str()];
 
-    auto const n_files = metainfo.fileCount();
+    auto const n_files = std::size(metainfo.files());
     auto const is_multifile = n_files > 1;
     NSString* fileTypeString = is_multifile ? NSFileTypeForHFSTypeCode(kGenericFolderIcon) : [name pathExtension];
 
@@ -194,7 +194,7 @@ OSStatus GeneratePreviewForURL(void* thisInterface, QLPreviewRequestRef preview,
 #warning display folders?
         for (auto const& file : metainfo.files())
         {
-            NSString* fullFilePath = [NSString stringWithUTF8String:file.name().c_str()];
+            NSString* fullFilePath = [NSString stringWithUTF8String:file.path().c_str()];
             NSCAssert([fullFilePath hasPrefix:[name stringByAppendingString:@"/"]], @"Expected file path %@ to begin with %@/", fullFilePath, name);
 
             NSString* shortenedFilePath = [fullFilePath substringFromIndex:[name length] + 1];
