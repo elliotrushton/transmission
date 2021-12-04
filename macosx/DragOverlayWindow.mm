@@ -100,11 +100,11 @@
 
                 size += metainfo.totalSize();
 
-                auto const n_files = std::size(info.files());
+                auto const n_files = std::size(metainfo.files());
                 fileCount += n_files;
                 if (n_files == 1)
                 {
-                    name = @(info.name);
+                    name = @(metainfo.name().c_str());
                 }
             }
         }
