@@ -107,8 +107,6 @@
                     name = @(info.name);
                 }
             }
-            tr_metainfoFree(&info);
-            tr_ctorFree(ctor);
         }
     }
 
@@ -137,7 +135,7 @@
     NSImage* icon;
     if (count == 1)
     {
-        icon = [NSWorkspace.sharedWorkspace iconForFileType:name ? name.pathExtension ? NSFileTypeForHFSTypeCode(kGenericFolderIcon)];
+        icon = [NSWorkspace.sharedWorkspace iconForFileType:name ? name.pathExtension : NSFileTypeForHFSTypeCode(kGenericFolderIcon)];
     }
     else
     {
